@@ -1,0 +1,121 @@
+---query to look at how many days have passed from the oldest Match to the most recent one (dataset time interval)---
+SELECT
+DATE_DIFF(MAX(date), MIN(date), day)AS date_difference
+FROM `sql-sandbox-422309.Final_Exercise.match
+
+--for each Season and League Name, the following statistics about the home goals scored: min, max, average, mid-range, and sum---
+SELECT distinct season, name as League_name, min(home_team_goal) as min_home_goal_scored, 
+max(home_team_goal) as max_home_team_goal, 
+round(avg(home_team_goal),3) as avg_home_goal_scored, 
+sum(home_team_goal) as total_home_goal_scored, 
+(min(home_team_goal) + max(home_team_goal)/2) as mid_range_home_goal   --calculate mid-range by summing min and max and dividing by 2--
+FROM `sql-sandbox-422309.Final_Exercise.Leagues` as a
+JOIN `sql-sandbox-422309.Final_Exercise.match` as b
+on a.id=b.league_id
+GROUP BY season, name
+ORDER BY max_home_team_goal DESC;
+--  Season-League has the highest number of goals is shown in the results --
+
+
+
+--looking at the unique seasons in the match table--
+SELECT  count(distinct(season)), 
+FROM `sql-sandbox-422309.Final_Exercise.Leagues` as a
+JOIN `sql-sandbox-422309.Final_Exercise.match` as b
+on a.id=b.league_id
+
+-- for each Season, the number of matches played by each League --
+SELECT season, name as league_name, count(distinct(match_api_id)) as match, 
+FROM `sql-sandbox-422309.Final_Exercise.Leagues` as a
+JOIN `sql-sandbox-422309.Final_Exercise.match` as b
+on a.id=b.league_id
+GROUP BY season, name
+ORDER BY season, match DESC
+
+
+--creating a new table with a new variable player BMI--
+CREATE TABLE `sql-sandbox-422309.Final_Exercise.PlayerBMI` AS
+SELECT id, player_name, 
+(weight/2.205) as kg_weight,(height/100) as m_height, 
+(weight/2.205)/pow((height/100),2) as BMI
+FROM `sql-sandbox-422309.Final_Exercise.player`
+
+
+-- Getting players with optimal BMI (18.5 - 24.9)--
+`sql-sandbox-422309.Final_Exercise.PlayerBMI` AS
+SELECT id, player_name, (weight/2.205) as kg_weight,(height/100) as m_height, (weight/2.205)/pow((height/100),2) as BMI
+FROM `sql-sandbox-422309.Final_Exercise.player`
+WHERE (weight/2.205)/pow((height/100),2) BETWEEN 18.5 and 24.9 
+ORDER BY BMI DESC
+
+---Players who do not have optimal BMI--
+select count(*)
+FROM `sql-sandbox-422309.Final_Exercise.PlayerBMI`
+WHERE BMI NOT BETWEEN 18.5 and 24.9
+
+
+---team with the highest number of total goals (home + away) during the most recenct available season--
+
+SELECT h.team_long_name, h.SumOfGoalHome, a.SumOfGoalAway, h.SumOfGoalHome + a.SumOfGoalAway as TotalGoal
+FROM
+ (SELECT t.team_long_name, sum(m.home_team_goal) as SumOfGoalHome
+ FROM `sql-sandbox-347110.Final_Exercise.match` m 
+ INNER JOIN `sql-sandbox-347110.Final_Exercise.team` t 
+   on m.home_team_api_id = t.team_api_id 
+ WHERE m.season = (select max(season) FROM `sql-sandbox-347110.Final_Exercise.match`)
+ GROUP BY t.team_long_name order by SumOfGoalHome) h 
+INNER JOIN
+ (SELECT t.team_long_name, sum(m.away_team_goal) as SumOfGoalAway
+ FROM `sql-sandbox-347110.Final_Exercise.match` m 
+ INNER JOIN `sql-sandbox-347110.Final_Exercise.team` t 
+   on m.away_team_api_id = t.team_api_id 
+ WHERE m.season = (select max(season) from `sql-sandbox-347110.Final_Exercise.match`)
+ GROUP BY t.team_long_name order by SumOfGoalAway) a 
+   on h.team_long_name = a.team_long_name
+ORDER by TotalGoal desc
+LIMIT 1
+
+
+---query that shows for each season, team that ranks first in terms of total goals scored 
+SELECT *
+FROM
+(SELECT h.season, h.team_long_name, h.SumOfGoalHome, a.SumOfGoalAway, h.SumOfGoalHome + a.SumOfGoalAway as TotalGoal,
+rank() over (PARTITION BY a.season order by h.SumOfGoalHome + a.SumOfGoalAway desc) as rank_season
+FROM
+(SELECT m.season, t.team_long_name, sum(m.home_team_goal) as SumOfGoalHome
+FROM `sql-sandbox-351014.Final_Exercise.Match` m INNNER JOIN
+`sql-sandbox-351014.Final_Exercise.Team` t on m.home_team_api_id = t.team_api_id
+GROUP BY m.season, t.team_long_name order by SumOfGoalHome) h 
+INNER JOIN
+(SELECT m.season,t.team_long_name, sum(m.away_team_goal) as SumOfGoalAway
+FROM `sql-sandbox-351014.Final_Exercise.Match` m INNER JOIN 
+`sql-sandbox-351014.Final_Exercise.Team` t on m.away_team_api_id = t.team_api_id 
+GROUP BY m.season, t.team_long_name ORDER BY SumOfGoalAway) a 
+on h.team_long_name = a.team_long_name and h.season=a.season)
+WHERE rank_season = 1
+ORDER BY season desc
+
+
+--creating a new table (TopScorer) containing top 10 teams in terms of total goals scored
+CREATE TABLE `sql-sandbox-422309.Final_Exercise.TopScorer`
+AS SELECT b.id AS team_id, team_long_name, (SUM(home_team_goal) + SUM(away_team_goal)) AS TotalGoalsScored
+FROM `sql-sandbox-422309.Final_Exercise.match` AS a
+LEFT JOIN  `sql-sandbox-422309.Final_Exercise.team` AS b
+ON a.home_team_api_id = b.team_api_id
+GROUP BY team_id, team_long_name
+ORDER BY TotalGoalsScored DESC
+LIMIT 10
+
+
+-- query showing all the possible pair combinations between the top 10 teams
+SELECT a.team_long_name, b.team_long_name
+FROM `sql-sandbox-347110.Final_Exercise.TopScorer` a
+INNER JOIN `sql-sandbox-347110.Final_Exercise.TopScorer` b
+on a.team_api_id > b.team_api_id
+
+
+
+
+
+
+
